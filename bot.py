@@ -6,7 +6,7 @@ except ImportError:
     sys.modules["audioop"] = audioop
 
 import asyncio
-import datetime
+from datetime import datetime, timezone, timedelta
 import os
 import re
 import time
@@ -26,6 +26,9 @@ except RuntimeError:
 load_dotenv()
 
 # --- KONFIGURASI ---
+# Timezone Jakarta (WIB = UTC+7)
+WIB = timezone(timedelta(hours=7))
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ALLOWED_SERVERS = [1440333970091802665]
 SCHEDULE_CHANNEL_ID = 1440355268138500107
@@ -37,17 +40,16 @@ GROQ_ALLOWED_CHANNELS = [1471130420857933937]
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_SYSTEM_PROMPT = os.getenv(
     "GROQ_SYSTEM_PROMPT",
-    "Kamu adalah asisten khusus untuk mahasiswa Sistem Informasi IS 1. "
-    "Kamu ramah, perhatian, talkative, dan selalu siap membantu teman-teman IS 1. "
-    "Jawab singkat, jelas, faktual, dan tidak mengarang. "
-    "Jika tidak yakin, katakan tidak tahu dan minta detail tambahan. "
-    "PENTING: Jika ditanya tentang jadwal atau reminder yang tidak ada di database, "
-    "katakan TIDAK ADA atau BELUM ADA, jangan mengarang atau membuat data fiktif. "
-    "Untuk menambah jadwal, user harus gunakan format: 'tambah jadwal [Hari] [HH:MM] [Mata Kuliah]'. "
-    "Jika user tanya 'bisa apa' atau 'command apa', arahkan mereka ketik 'help' atau 'bantuan' untuk list lengkap.",
+    "Kamu adalah asisten friendly untuk mahasiswa Sistem Informasi IS 1 bernama IS 1 Assistant! "
+    "Kamu ramah, ceria, perhatian, dan suka ngobrol santai dengan teman-teman IS 1. "
+    "Kamu bisa jawab pertanyaan umum, diskusi topik kuliah, atau sekadar ngobrol. "
+    "Jawab dengan natural dan enak dibaca, boleh pakai emoji sesekali. "
+    "PENTING: Untuk data jadwal/reminder, HANYA gunakan data dari database yang diberikan. "
+    "Jangan mengarang jadwal atau reminder yang tidak ada. Kalau tidak ada data, bilang terus terang. "
+    "Tips: Ketik 'help' untuk lihat semua command yang tersedia!",
 )
-GROQ_TEMPERATURE = float(os.getenv("GROQ_TEMPERATURE", "0.3"))
-GROQ_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "400"))
+GROQ_TEMPERATURE = float(os.getenv("GROQ_TEMPERATURE", "0.7"))
+GROQ_MAX_TOKENS = int(os.getenv("GROQ_MAX_TOKENS", "800"))
 
 # Inisialisasi client di luar loop agar lebih efisien
 client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
@@ -113,7 +115,7 @@ def log_command_usage(user_id, command_name):
     """Simple analytics tracking"""
     try:
         with open("analytics.log", "a", encoding="utf-8") as f:
-            timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            timestamp = datetime.now(WIB).strftime("%Y-%m-%d %H:%M:%S")
             f.write(f"{timestamp}|{user_id}|{command_name}\n")
     except Exception as e:
         print(f"[ANALYTICS ERROR] {e}")
@@ -137,13 +139,13 @@ async def announce_schedule():
     await bot.wait_until_ready()
     channel = bot.get_channel(SCHEDULE_CHANNEL_ID)
     if channel:
-        day_eng = datetime.datetime.now().strftime("%A").lower()
+        day_eng = datetime.now(WIB).strftime("%A").lower()
         schedule_data = database.get_schedule_for_day(day_eng)
         if schedule_data:
             embed = discord.Embed(
                 title=f"📅 Jadwal Kuliah Hari Ini",
                 color=discord.Color.blue(),
-                timestamp=datetime.datetime.now(),
+                timestamp=datetime.now(WIB),
             )
             for time_val, subject in schedule_data:
                 embed.add_field(name=f"🕒 {time_val}", value=subject, inline=False)
@@ -273,7 +275,7 @@ async def on_message(message: discord.Message):
         # Cek apakah query adalah hari
         day_query = query.capitalize()
         if day_query == "Hari ini":
-            day_eng = datetime.datetime.now().strftime("%A").lower()
+            day_eng = datetime.now(WIB).strftime("%A").lower()
             day_name = [k for k, v in INDO_TO_ENG.items() if v == day_eng][0]
             data = database.get_schedule_for_day(day_eng)
             if not data:
@@ -320,7 +322,7 @@ async def on_message(message: discord.Message):
 
     # Default: lihat jadwal hari ini
     if re.match(r"(?i)^(lihat|cek)?\s*jadwal$", user_message):
-        day_eng = datetime.datetime.now().strftime("%A").lower()
+        day_eng = datetime.now(WIB).strftime("%A").lower()
         day_name = [k for k, v in INDO_TO_ENG.items() if v == day_eng][0]
         data = database.get_schedule_for_day(day_eng)
         if not data:
@@ -432,8 +434,8 @@ async def on_message(message: discord.Message):
     # Jawab pertanyaan waktu secara deterministik
     time_pattern = r"\b(jam|pukul|waktu|time)\b"
     if re.search(time_pattern, user_message, re.IGNORECASE):
-        now = datetime.datetime.now().strftime("%H:%M")
-        await message.reply(f"Sekarang pukul {now}.", mention_author=False)
+        now = datetime.now(WIB).strftime("%H:%M")
+        await message.reply(f"Sekarang pukul {now} WIB.", mention_author=False)
         return
 
     # Help/Bantuan - berikan list command sesuai role user
