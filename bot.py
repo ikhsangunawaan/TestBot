@@ -704,13 +704,13 @@ async def on_message(message: discord.Message):
         user_message,
     )
     if reminder_list or user_message.lower() in {"reminder saya", "daftar reminder", "list reminder"}:
-        reminders = database.get_user_reminders(message.author.id, limit=5)
+        reminders = database.get_user_reminders(int(message.author.id), limit=5)
         if not reminders:
             await message.reply("Belum ada reminder aktif.", mention_author=False)
             return
         lines = []
         for reminder_id, remind_at, reminder_message in reminders:
-            time_str = datetime.fromtimestamp(remind_at).strftime("%d-%m %H:%M")
+            time_str = datetime.fromtimestamp(int(remind_at)).strftime("%d-%m %H:%M")
             lines.append(f"- {time_str} | {reminder_message}")
         await message.reply(
             "⏰ Reminder kamu:\n" + "\n".join(lines),
@@ -806,7 +806,7 @@ async def on_message(message: discord.Message):
         try:
             # Log aktivitas ke terminal Azure kamu
             print(f"[LOG] {message.author} bertanya: {user_message}")
-            log_command_usage(message.author.id, "ai_chat")
+            log_command_usage(int(message.author.id), "ai_chat")
 
             # Inject database context untuk AI
             db_context = []
@@ -827,7 +827,7 @@ async def on_message(message: discord.Message):
             if user_reminders:
                 reminder_lines = []
                 for reminder_id, remind_at, reminder_msg in user_reminders:
-                    time_str = datetime.fromtimestamp(remind_at).strftime("%d-%m %H:%M")
+                    time_str = datetime.fromtimestamp(int(remind_at)).strftime("%d-%m %H:%M")
                     reminder_lines.append(f"{time_str}: {reminder_msg}")
                 db_context.append(f"Reminder user ini:\n" + "\n".join(reminder_lines))
             else:
