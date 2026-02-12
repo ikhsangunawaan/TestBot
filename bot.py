@@ -36,7 +36,7 @@ ROLE_ID = "1440340102122307665"
 
 # --- KONFIGURASI GROQ AI ---
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
-GROQ_ALLOWED_CHANNELS = [1471130420857933937]
+GROQ_ALLOWED_CHANNELS = [1471130420857933937, 1471365406773219365]
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_SYSTEM_PROMPT = os.getenv(
     "GROQ_SYSTEM_PROMPT",
@@ -100,6 +100,176 @@ def parse_duration_to_seconds(text):
         elif unit == "s":
             total_seconds += value_int
     return total_seconds
+
+
+# ==================== NATURAL LANGUAGE PARSING ====================
+
+def extract_duration_from_text(text):
+    """Extract durasi dari text seperti 'dalam 5 menit', 'dalam 2 jam', dll
+    Return: (duration_seconds, cleaned_text)
+    """
+    # Pattern: "dalam X [menit|jam|hari|detik]"
+    duration_match = re.search(r"dalam\s+(\d+)\s*(menit|jam|hari|detik|m|h|d|s)", text, re.IGNORECASE)
+    if duration_match:
+        value = int(duration_match.group(1))
+        unit = duration_match.group(2).lower()
+        
+        if unit in ["menit", "m"]:
+            seconds = value * 60
+        elif unit in ["jam", "h"]:
+            seconds = value * 3600
+        elif unit in ["hari", "d"]:
+            seconds = value * 86400
+        elif unit in ["detik", "s"]:
+            seconds = value
+        else:
+            seconds = value * 60  # Default menit
+        
+        # Remove duration part dari text
+        cleaned = re.sub(r"dalam\s+\d+\s*(menit|jam|hari|detik|m|h|d|s)", "", text, flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r"untuk|apa", "", cleaned, flags=re.IGNORECASE).strip()
+        
+        return seconds, cleaned
+    
+    return None, text
+
+
+def extract_day_from_text(text):
+    """Extract nama hari dari text
+    Return: (day_eng, day_indo) atau (None, None) jika tidak ditemukan
+    """
+    day_patterns = [
+        (r"\b(senin|monday|mon)\b", "monday", "Senin"),
+        (r"\b(selasa|tuesday|tue)\b", "tuesday", "Selasa"),
+        (r"\b(rabu|wednesday|wed)\b", "wednesday", "Rabu"),
+        (r"\b(kamis|thursday|thu)\b", "thursday", "Kamis"),
+        (r"\b(jumat|friday|fri)\b", "friday", "Jumat"),
+        (r"\b(sabtu|saturday|sat)\b", "saturday", "Sabtu"),
+        (r"\b(minggu|sunday|sun)\b", "sunday", "Minggu"),
+    ]
+    
+    for pattern, day_eng, day_indo in day_patterns:
+        if re.search(pattern, text, re.IGNORECASE):
+            return day_eng, day_indo
+    
+    return None, None
+
+
+def extract_time_from_text(text):
+    """Extract waktu (HH:MM) dari text seperti 'jam 08:00', 'pukul 10:30', dll
+    Return: waktu string (HH:MM) atau None
+    """
+    # Pattern: "jam/pukul HH:MM" atau langsung "HH:MM"
+    time_match = re.search(r"(?:jam|pukul)?\s*(\d{1,2}):(\d{2})", text, re.IGNORECASE)
+    if time_match:
+        hour = int(time_match.group(1))
+        minute = int(time_match.group(2))
+        
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return f"{hour:02d}:{minute:02d}"
+    
+    return None
+
+
+def parse_add_reminder_natural(text):
+    """Parse natural language: 'ingatkan/reminder dalam 5 menit untuk [teks]'
+    Return: (duration_seconds, reminder_text) atau (None, None) jika parse gagal
+    """
+    # Cek pattern: ingatkan/reminder + durasi + teks
+    if not re.search(r"\b(ingatkan|reminder|remind|ingat|ingetin)\b", text, re.IGNORECASE):
+        return None, None
+    
+    # Remove trigger word
+    text_clean = re.sub(r"\b(ingatkan|reminder|remind|ingat|ingetin)\b\s*", "", text, flags=re.IGNORECASE).strip()
+    
+    # Extract durasi
+    duration_seconds, reminder_text = extract_duration_from_text(text_clean)
+    
+    if duration_seconds and reminder_text:
+        return duration_seconds, reminder_text
+    
+    return None, None
+
+
+def parse_add_schedule_natural(text):
+    """Parse natural language: 'tambah/tambahkan jadwal [hari] [jam] [subject]'
+    Return: (day_eng, day_indo, time, subject) atau None jika parse gagal
+    """
+    # Cek pattern: tambah/tambahkan jadwal
+    if not re.search(r"\b(tambah|tambahkan|add)\b.*\b(jadwal|schedule)\b", text, re.IGNORECASE):
+        return None
+    
+    # Remove trigger words
+    text_clean = re.sub(r"(tambah|tambahkan|add)\s+(jadwal|schedule)\s*", "", text, flags=re.IGNORECASE).strip()
+    
+    # Extract hari
+    day_eng, day_indo = extract_day_from_text(text_clean)
+    if not day_eng:
+        return None
+    
+    # Extract waktu
+    time_val = extract_time_from_text(text_clean)
+    if not time_val:
+        return None
+    
+    # Remove day dan time dari text untuk get subject
+    subject = re.sub(r"\b(senin|selasa|rabu|kamis|jumat|sabtu|minggu|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b", "", text_clean, flags=re.IGNORECASE).strip()
+    subject = re.sub(r"(?:jam|pukul)?\s*\d{1,2}:\d{2}", "", subject).strip()
+    
+    if not subject:
+        return None
+    
+    return day_eng, day_indo, time_val, subject
+
+
+def parse_delete_schedule_natural(text):
+    """Parse natural language: 'hapus jadwal [hari] [jam]'
+    Return: (day_eng, day_indo, time) atau None jika parse gagal
+    """
+    # Cek pattern: hapus jadwal
+    if not re.search(r"\b(hapus|delete|remove)\b.*\b(jadwal|schedule)\b", text, re.IGNORECASE):
+        return None
+    
+    # Extract hari
+    day_eng, day_indo = extract_day_from_text(text)
+    if not day_eng:
+        return None
+    
+    # Extract waktu
+    time_val = extract_time_from_text(text)
+    if not time_val:
+        return None
+    
+    return day_eng, day_indo, time_val
+
+
+def parse_delete_reminder_natural(text):
+    """Parse natural language: 'hapus reminder [teks/terbaru]' atau 'clear reminder', etc
+    Return: reminder_text atau 'latest' atau None jika parse gagal
+    """
+    # Cek pattern: hapus reminder, delete reminder, clear reminder
+    if not re.search(r"\b(hapus|delete|remove|clear)\b.*\b(reminder|reminders)\b", text, re.IGNORECASE):
+        return None
+    
+    # Remove trigger words
+    text_clean = re.sub(r"(hapus|delete|remove|clear)\s+(semua\s+)?(reminder|reminders)\s*", "", text, flags=re.IGNORECASE).strip()
+    
+    # Cek untuk "semua" / "all"
+    if re.search(r"\b(semua|all)\b", text_clean, re.IGNORECASE):
+        return "all"
+    
+    # Cek untuk "terbaru" / "latest"
+    if re.search(r"\b(terbaru|latest|terakhir)\b", text_clean, re.IGNORECASE):
+        return "latest"
+    
+    # Jika ada sisa text, gunakan sebagai search text
+    if text_clean:
+        return text_clean
+    
+    return None
+
+
+# ==================== END NATURAL LANGUAGE PARSING ====================
 
 
 def contains_sensitive_data(text):
@@ -208,6 +378,126 @@ async def on_message(message: discord.Message):
         return
     elif not user_message:
         return
+
+    # ==================== NATURAL LANGUAGE COMMAND PARSING ====================
+    
+    # Parse: Tambah Reminder dengan natural language
+    # Contoh: "ingatkan aku dalam 5 menit untuk belajar", "reminder dalam 2 jam untuk makan"
+    reminder_duration, reminder_text = parse_add_reminder_natural(user_message)
+    if reminder_duration and reminder_text:
+        is_sensitive, keyword = contains_sensitive_data(reminder_text)
+        if is_sensitive:
+            await message.reply(
+                f"❌ Tidak dapat menyimpan reminder dengan data sensitif (terdeteksi: '{keyword}'). Jaga privasi kamu ya!",
+                mention_author=False,
+            )
+            return
+        
+        database.add_reminder(message.author.id, reminder_text, reminder_duration)
+        log_command_usage(message.author.id, "add_reminder_natural")
+        await message.reply(
+            f"⏰ Reminder ditambahkan! Akan mengingatkan kamu dalam {reminder_duration // 60} menit untuk: {reminder_text}",
+            mention_author=False,
+        )
+        return
+
+    # Parse: Hapus Reminder dengan natural language
+    # Contoh: "hapus reminder", "hapus reminder belajar", "hapus semua reminder"
+    delete_reminder_query = parse_delete_reminder_natural(user_message)
+    if delete_reminder_query:
+        if delete_reminder_query == "all":
+            # Hapus semua reminder user
+            reminders = database.get_user_reminders(message.author.id)
+            if not reminders:
+                await message.reply("Belum ada reminder untuk dihapus.", mention_author=False)
+                return
+            database.delete_all_user_reminders(message.author.id)
+            log_command_usage(message.author.id, "delete_all_reminders_natural")
+            await message.reply(f"✅ Semua reminder kamu berhasil dihapus ({len(reminders)} reminder).", mention_author=False)
+            return
+        
+        elif delete_reminder_query == "latest":
+            # Hapus reminder terbaru
+            reminders = database.get_user_reminders(message.author.id)
+            if not reminders:
+                await message.reply("Belum ada reminder untuk dihapus.", mention_author=False)
+                return
+            latest_reminder = reminders[-1]
+            reminder_id, _, reminder_text = latest_reminder
+            database.delete_reminder(reminder_id)
+            log_command_usage(message.author.id, "delete_latest_reminder_natural")
+            await message.reply(
+                f"✅ Reminder '{reminder_text}' berhasil dihapus.",
+                mention_author=False,
+            )
+            return
+        
+        else:
+            # Search reminder by text
+            reminders = database.get_user_reminders(message.author.id)
+            matched = [r for r in reminders if delete_reminder_query.lower() in r[2].lower()]
+            if not matched:
+                await message.reply(f"Reminder '{delete_reminder_query}' tidak ditemukan.", mention_author=False)
+                return
+            for reminder_id, _, _ in matched:
+                database.delete_reminder(reminder_id)
+            log_command_usage(message.author.id, "delete_reminder_natural")
+            await message.reply(
+                f"✅ {len(matched)} reminder berhasil dihapus.",
+                mention_author=False,
+            )
+            return
+
+    # Parse: Tambah Jadwal dengan natural language
+    # Contoh: "tambahkan jadwal senin jam 08:00 kuliah AI", "tambah jadwal rabu 14:00 pemrograman"
+    schedule_result = parse_add_schedule_natural(user_message)
+    if schedule_result:
+        day_eng, day_indo, time_val, subject = schedule_result
+        
+        # Check sensitive data
+        is_sensitive, keyword = contains_sensitive_data(subject)
+        if is_sensitive:
+            await message.reply(
+                f"❌ Tidak dapat menyimpan data sensitif (terdeteksi: '{keyword}'). Jaga privasi kamu ya!",
+                mention_author=False,
+            )
+            return
+        
+        database.add_schedule(day_eng, time_val, subject)
+        log_command_usage(message.author.id, "add_schedule_natural")
+        await message.reply(
+            f"✅ Jadwal {day_indo} jam {time_val} berhasil ditambah: {subject}",
+            mention_author=False,
+        )
+        return
+
+    # Parse: Hapus Jadwal dengan natural language
+    # Contoh: "hapus jadwal senin jam 08:00", "delete schedule rabu 14:00"
+    delete_schedule_result = parse_delete_schedule_natural(user_message)
+    if delete_schedule_result:
+        day_eng, day_indo, time_val = delete_schedule_result
+        
+        # Cek apakah jadwal ada
+        data = database.get_schedule_for_day(day_eng)
+        if not data:
+            await message.reply(f"Gak ada jadwal di hari {day_indo}.", mention_author=False)
+            return
+        
+        # Find dan delete jadwal dengan jam yang sama
+        matched = [s for s in data if s[0] == time_val]
+        if not matched:
+            await message.reply(f"Jadwal jam {time_val} di {day_indo} tidak ditemukan.", mention_author=False)
+            return
+        
+        database.delete_schedule_by_subject(day_eng, matched[0][1])
+        log_command_usage(message.author.id, "delete_schedule_natural")
+        await message.reply(
+            f"✅ Jadwal {day_indo} jam {time_val} berhasil dihapus.",
+            mention_author=False,
+        )
+        return
+
+    # ==================== END NATURAL LANGUAGE PARSING ====================
 
     schedule_add = re.match(
         r"(?i)^(tambah|add)\s+jadwal\s+(\w+)\s+(\d{1,2}:\d{2})\s+(.+)$",
