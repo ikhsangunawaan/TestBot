@@ -709,7 +709,7 @@ async def on_message(message: discord.Message):
             return
         lines = []
         for remind_at, reminder_message in reminders:
-            time_str = datetime.datetime.fromtimestamp(remind_at).strftime("%d-%m %H:%M")
+            time_str = datetime.fromtimestamp(remind_at).strftime("%d-%m %H:%M")
             lines.append(f"- {time_str} | {reminder_message}")
         await message.reply(
             "⏰ Reminder kamu:\n" + "\n".join(lines),
@@ -826,7 +826,7 @@ async def on_message(message: discord.Message):
             if user_reminders:
                 reminder_lines = []
                 for remind_at, reminder_msg in user_reminders:
-                    time_str = datetime.datetime.fromtimestamp(remind_at).strftime("%d-%m %H:%M")
+                    time_str = datetime.fromtimestamp(remind_at).strftime("%d-%m %H:%M")
                     reminder_lines.append(f"{time_str}: {reminder_msg}")
                 db_context.append(f"Reminder user ini:\n" + "\n".join(reminder_lines))
             else:
