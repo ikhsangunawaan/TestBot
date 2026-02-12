@@ -6,6 +6,18 @@ except ImportError:
     sys.modules["audioop"] = audioop
 
 import asyncio
+import sys as _sys
+
+# Setup event loop untuk Python 3.14+ SEBELUM import discord
+if _sys.platform == 'win32':
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    asyncio.set_event_loop(asyncio.new_event_loop())
+else:
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
+
 from datetime import datetime, timezone, timedelta
 import os
 import re
@@ -17,11 +29,6 @@ from groq import Groq
 from discord import ui
 from discord.ext import commands, tasks
 from dotenv import load_dotenv
-
-try:
-    asyncio.get_event_loop()
-except RuntimeError:
-    asyncio.set_event_loop(asyncio.new_event_loop())
 
 load_dotenv()
 
