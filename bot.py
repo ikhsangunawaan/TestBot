@@ -357,6 +357,75 @@ async def log_to_channel(log_type: str, title: str, description: str, details: d
     except Exception as e:
         print(f"[LOG ERROR] Failed to send log: {e}")
 
+# --- PERSONALITY SYSTEM ---
+
+def init_personalities():
+    """Initialize default AI personalities"""
+    personalities = {
+        "friendly": {
+            "name": "Teman Baik",
+            "description": "Ramah, ceria, dan santai",
+            "emoji": "😊",
+            "prompt": "Kamu adalah asisten friendly untuk mahasiswa Sistem Informasi IS 1 bernama IS 1 Assistant! "
+                     "Kamu ramah, ceria, perhatian, dan suka ngobrol santai dengan teman-teman IS 1. "
+                     "Kamu bisa jawab pertanyaan umum, diskusi topik kuliah, atau sekadar ngobrol. "
+                     "Jawab dengan natural dan enak dibaca, boleh pakai emoji sesekali. "
+                     "PENTING: Untuk data jadwal/reminder, HANYA gunakan data dari database yang diberikan. "
+                     "Jangan mengarang jadwal atau reminder yang tidak ada. Kalau tidak ada data, bilang terus terang."
+        },
+        "professional": {
+            "name": "Asisten Profesional",
+            "description": "Formal, informatif, fokus data",
+            "emoji": "💼",
+            "prompt": "Kamu adalah IS 1 Assistant, asisten profesional untuk mahasiswa Sistem Informasi IS 1. "
+                     "Berikan jawaban yang terstruktur, spesifik, dan berbasis data. "
+                     "Hindari obrolan santai dan fokus pada informasi yang akurat. "
+                     "Gunakan format yang jelas dengan poin-poin. "
+                     "PENTING: Hanya gunakan data jadwal/reminder dari database. Tidak ada spekulasi atau data fiktif. "
+                     "Jika data tidak tersedia, katakan dengan jelas."
+        },
+        "tutor": {
+            "name": "Tutor Edukatif",
+            "description": "Mengajar, menjelaskan konsep dengan detail",
+            "emoji": "📚",
+            "prompt": "Kamu adalah IS 1 Assistant yang berperan sebagai tutor untuk mahasiswa IS 1. "
+                     "Ketika menjawab pertanyaan, jelaskan konsep dengan detail dan berikan contoh nyata. "
+                     "Gunakan analogi yang mudah dipahami. Dorong critical thinking dengan memberikan pertanyaan balik. "
+                     "Pecah topik kompleks menjadi bagian-bagian yang lebih kecil. "
+                     "PENTING: Untuk jadwal/reminder, hanya gunakan data dari database. Tunjukkan sumbernya jika relevan."
+        },
+        "energik": {
+            "name": "Motivator Energik",
+            "description": "Motivasi, semangat, penuh energi",
+            "emoji": "🚀",
+            "prompt": "Kamu adalah IS 1 Assistant dengan kepribadian yang super energik dan motivatif! "
+                     "Berikan semangat dan dorongan positif kepada mahasiswa IS 1 dalam setiap interaksi. "
+                     "Gunakan banyak emoji yang menyenangkan dan kata-kata inspiratif. "
+                     "Jadilah cheerleader yang mendukung semangat belajar mereka! "
+                     "PENTING: Untuk info jadwal/reminder, tetap akurat dan gunakan data dari database saja. "
+                     "Delivery semangat, tapi content tetap berdasarkan data nyata."
+        },
+        "helpful": {
+            "name": "Asisten Membantu",
+            "description": "Fokus solusi, praktis, action-oriented",
+            "emoji": "🤝",
+            "prompt": "Kamu adalah IS 1 Assistant yang berfokus pada solusi praktis. "
+                     "Ketika mahasiswa IS 1 minta bantuan, berikan langkah-langkah konkret dan actionable. "
+                     "Ringkas poin penting dan berikan rekomendasi spesifik. "
+                     "Setiap jawaban harus membawa nilai dan membantu mereka mengambil aksi nyata. "
+                     "PENTING: Jadwal dan reminder hanya dari database. Tawarkan bantuan konkret berdasarkan data tersebut."
+        }
+    }
+    
+    for personality_id, data in personalities.items():
+        database.add_personality(
+            personality_id,
+            data["name"],
+            data["description"],
+            data["prompt"],
+            data["emoji"]
+        )
+
 # --- TASKS ---
 
 @tasks.loop(seconds=15)
@@ -437,6 +506,10 @@ async def announce_schedule():
 async def on_ready():
     print(f"--- IS 1 Assistant is Online! ---") # Tanda kehidupan di terminal
     print(f"Logged in as {bot.user.name} (ID: {bot.user.id})")
+    
+    # Initialize personalities on startup
+    init_personalities()
+    print("[PERSONALITIES] Initialized 5 AI personalities")
     
     # Set rich presence
     activity = discord.Activity(type=discord.ActivityType.listening, name="IS ONLY ONE")
@@ -931,12 +1004,16 @@ async def on_message(message: discord.Message):
             
             context_message = "\n\n".join(db_context)
 
+            # Get user's personality preference
+            user_personality_id = database.get_user_personality(message.author.id)
+            user_personality = database.get_personality(user_personality_id) or GROQ_SYSTEM_PROMPT
+
             response = client.chat.completions.create(
                 model=GROQ_MODEL,
                 temperature=GROQ_TEMPERATURE,
                 max_tokens=GROQ_MAX_TOKENS,
                 messages=[
-                    {"role": "system", "content": GROQ_SYSTEM_PROMPT},
+                    {"role": "system", "content": user_personality},
                     {"role": "system", "content": f"[DATA DARI DATABASE]\n{context_message}"},
                     {"role": "user", "content": user_message},
                 ],
@@ -964,5 +1041,80 @@ async def on_message(message: discord.Message):
 
 # --- SLASH COMMANDS (isinfo, isaddschedule, dll tetap sama) ---
 # ... (kode Slash Commands kamu di sini) ...
+
+# --- PERSONALITY COMMANDS ---
+
+@bot.slash_command(name="personality", description="Lihat semua personality AI yang tersedia")
+async def personality_list(ctx):
+    """List all available personalities"""
+    personalities = database.get_all_personalities()
+    if not personalities:
+        await ctx.respond("Belum ada personality yang tersedia.", ephemeral=True)
+        return
+    
+    embed = discord.Embed(
+        title="🤖 AI Personalities Tersedia",
+        description="Ketik `/set_personality` untuk memilih personality favoritmu!",
+        color=discord.Color.blue()
+    )
+    
+    for personality_id, name, description, emoji in personalities:
+        embed.add_field(
+            name=f"{emoji} {name}",
+            value=f"`{personality_id}`\n{description}",
+            inline=False
+        )
+    
+    await ctx.respond(embed=embed)
+
+
+@bot.slash_command(name="set_personality", description="Pilih personality AI kesukaan kamu")
+async def set_personality(ctx, personality: str):
+    """Set user's personality preference"""
+    personalities = database.get_all_personalities()
+    valid_ids = [p[0] for p in personalities]
+    
+    if personality.lower() not in valid_ids:
+        available = ", ".join([f"`{p[0]}`" for p in personalities])
+        await ctx.respond(
+            f"❌ Personality '{personality}' tidak ada.\n\nYang tersedia: {available}",
+            ephemeral=True
+        )
+        return
+    
+    database.set_user_personality(int(ctx.author.id), personality.lower())
+    
+    # Find personality details for response
+    personality_data = next((p for p in personalities if p[0] == personality.lower()), None)
+    if personality_data:
+        name, desc, emoji = personality_data[1], personality_data[2], personality_data[3]
+        embed = discord.Embed(
+            title=f"{emoji} Personality Diubah!",
+            description=f"Kamu sekarang menggunakan personality: **{name}**\n\n{desc}",
+            color=discord.Color.green()
+        )
+        await ctx.respond(embed=embed)
+
+
+@bot.slash_command(name="my_personality", description="Lihat personality AI kamu yang sekarang")
+async def my_personality(ctx):
+    """Check current user's personality"""
+    user_personality_id = database.get_user_personality(int(ctx.author.id))
+    personalities = database.get_all_personalities()
+    
+    personality_data = next((p for p in personalities if p[0] == user_personality_id), None)
+    
+    if personality_data:
+        personality_id, name, description, emoji = personality_data
+        embed = discord.Embed(
+            title=f"😎 Personality Kamu Sekarang",
+            description=f"{emoji} **{name}**\n\n{description}",
+            color=discord.Color.purple()
+        )
+        embed.add_field(name="ID", value=f"`{personality_id}`", inline=False)
+        embed.set_footer(text="Ketik /set_personality untuk mengubah")
+        await ctx.respond(embed=embed)
+    else:
+        await ctx.respond("❌ Personality kamu tidak ditemukan.", ephemeral=True)
 
 bot.run(BOT_TOKEN)

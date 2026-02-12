@@ -12,6 +12,12 @@ def init_db():
         c.execute(
             """CREATE TABLE IF NOT EXISTS reminders (id INTEGER PRIMARY KEY, user_id INTEGER, remind_at INTEGER, message TEXT)"""
         )
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS personalities (id TEXT PRIMARY KEY, name TEXT, description TEXT, system_prompt TEXT, emoji TEXT)"""
+        )
+        c.execute(
+            """CREATE TABLE IF NOT EXISTS user_personality (user_id INTEGER PRIMARY KEY, personality_id TEXT)"""
+        )
         conn.commit()
 
 
@@ -133,3 +139,53 @@ def delete_all_user_reminders(user_id):
         c.execute("DELETE FROM reminders WHERE user_id = ?", (user_id,))
         conn.commit()
         return c.rowcount
+
+
+# --- PERSONALITY MANAGEMENT ---
+
+def add_personality(personality_id, name, description, system_prompt, emoji="🤖"):
+    """Add a new AI personality"""
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute(
+            "INSERT OR REPLACE INTO personalities (id, name, description, system_prompt, emoji) VALUES (?, ?, ?, ?, ?)",
+            (personality_id, name, description, system_prompt, emoji),
+        )
+        conn.commit()
+
+
+def get_all_personalities():
+    """Get all available personalities"""
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("SELECT id, name, description, emoji FROM personalities ORDER BY id")
+        return c.fetchall()
+
+
+def get_personality(personality_id):
+    """Get personality system prompt"""
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("SELECT system_prompt FROM personalities WHERE id = ?", (personality_id,))
+        result = c.fetchone()
+        return result[0] if result else None
+
+
+def set_user_personality(user_id, personality_id):
+    """Set user's preferred personality"""
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute(
+            "INSERT OR REPLACE INTO user_personality (user_id, personality_id) VALUES (?, ?)",
+            (user_id, personality_id),
+        )
+        conn.commit()
+
+
+def get_user_personality(user_id, default="friendly"):
+    """Get user's personality preference"""
+    with sqlite3.connect(DB_NAME) as conn:
+        c = conn.cursor()
+        c.execute("SELECT personality_id FROM user_personality WHERE user_id = ?", (user_id,))
+        result = c.fetchone()
+        return result[0] if result else default
