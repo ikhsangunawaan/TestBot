@@ -87,7 +87,7 @@ def get_user_reminders(user_id, limit=5):
     with sqlite3.connect(DB_NAME) as conn:
         c = conn.cursor()
         c.execute(
-            "SELECT remind_at, message FROM reminders WHERE user_id = ? ORDER BY remind_at LIMIT ?",
+            "SELECT id, remind_at, message FROM reminders WHERE user_id = ? ORDER BY remind_at LIMIT ?",
             (user_id, limit),
         )
         return c.fetchall()

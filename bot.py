@@ -409,7 +409,8 @@ async def on_message(message: discord.Message):
             )
             return
         
-        database.add_reminder(message.author.id, reminder_text, reminder_duration)
+        remind_at = int(time.time()) + reminder_duration
+        database.add_reminder(message.author.id, remind_at, reminder_text)
         log_command_usage(message.author.id, "add_reminder_natural")
         await message.reply(
             f"⏰ Reminder ditambahkan! Akan mengingatkan kamu dalam {reminder_duration // 60} menit untuk: {reminder_text}",
@@ -708,7 +709,7 @@ async def on_message(message: discord.Message):
             await message.reply("Belum ada reminder aktif.", mention_author=False)
             return
         lines = []
-        for remind_at, reminder_message in reminders:
+        for reminder_id, remind_at, reminder_message in reminders:
             time_str = datetime.fromtimestamp(remind_at).strftime("%d-%m %H:%M")
             lines.append(f"- {time_str} | {reminder_message}")
         await message.reply(
@@ -825,7 +826,7 @@ async def on_message(message: discord.Message):
             user_reminders = database.get_user_reminders(message.author.id, limit=3)
             if user_reminders:
                 reminder_lines = []
-                for remind_at, reminder_msg in user_reminders:
+                for reminder_id, remind_at, reminder_msg in user_reminders:
                     time_str = datetime.fromtimestamp(remind_at).strftime("%d-%m %H:%M")
                     reminder_lines.append(f"{time_str}: {reminder_msg}")
                 db_context.append(f"Reminder user ini:\n" + "\n".join(reminder_lines))
