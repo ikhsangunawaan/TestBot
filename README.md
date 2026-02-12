@@ -70,7 +70,41 @@ python bot.py
 
 ## 📝 Command List
 
-### Text Commands (untuk semua user)
+### 🗣️ Natural Language Commands (AI-Powered)
+Bot sekarang mengerti perintah dalam bahasa natural! Tidak perlu format yang ketat lagi.
+
+#### Reminder (Natural Language)
+```
+"ingatkan aku dalam 5 menit untuk belajar"
+"reminder dalam 2 jam untuk makan"
+"ingat aku dalam 30 detik untuk submit tugas"
+"dalam 1 hari ingetin aku untuk tidur"
+```
+
+**Delete Reminder:**
+```
+"hapus reminder belajar"        # Delete reminder with keyword "belajar"
+"hapus reminder terbaru"        # Delete latest reminder
+"hapus semua reminder"          # Delete all reminders
+```
+
+#### Jadwal (Natural Language)
+**Add Schedule:**
+```
+"tambahkan jadwal senin jam 08:00 kuliah AI"
+"tambah jadwal rabu 14:30 pemrograman web"
+"jadwal jumat pukul 10:00 basis data"
+```
+
+**Delete Schedule:**
+```
+"hapus jadwal senin jam 08:00"
+"delete schedule rabu 14:30"
+```
+
+---
+
+### Text Commands (Traditional Format)
 | Command | Deskripsi | Contoh |
 |---------|-----------|--------|
 | `tambah jadwal [Hari] [HH:MM] [Matkul]` | Tambah jadwal | `tambah jadwal Senin 09:00 Matdis` |
