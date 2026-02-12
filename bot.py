@@ -310,15 +310,27 @@ def log_command_usage(user_id, command_name):
 
 @tasks.loop(seconds=15)
 async def check_reminders():
+    await bot.wait_until_ready()
     due_reminders = database.get_due_reminders()
+    if due_reminders:
+        print(f"[REMINDER] Found {len(due_reminders)} due reminders")
     for reminder_id, user_id, message in due_reminders:
-        user = bot.get_user(user_id) or await bot.fetch_user(user_id)
-        if user:
-            try:
+        try:
+            user = bot.get_user(user_id)
+            if not user:
+                user = await bot.fetch_user(user_id)
+            if user:
                 await user.send(f"⏰ **Reminder:** {message}")
-            except discord.Forbidden:
-                print(f"DM ditutup untuk user {user_id}")
-        database.delete_reminder(reminder_id)
+                print(f"[REMINDER] Sent to user {user_id}: {message}")
+            else:
+                print(f"[REMINDER] User {user_id} not found, skipping")
+        except discord.Forbidden:
+            print(f"[REMINDER] DM ditutup untuk user {user_id}")
+        except Exception as e:
+            print(f"[REMINDER ERROR] Failed to send reminder {reminder_id}: {e}")
+        finally:
+            database.delete_reminder(reminder_id)
+            print(f"[REMINDER] Deleted reminder {reminder_id} from database")
 
 @tasks.loop(hours=24)
 async def announce_schedule():
