@@ -125,9 +125,12 @@ def extract_duration_from_text(text):
         else:
             seconds = value * 60  # Default menit
         
-        # Remove duration part dari text
+        # Remove duration part dan keywords dari text
         cleaned = re.sub(r"dalam\s+\d+\s*(menit|jam|hari|detik|m|h|d|s)", "", text, flags=re.IGNORECASE).strip()
-        cleaned = re.sub(r"untuk|apa", "", cleaned, flags=re.IGNORECASE).strip()
+        # Remove connector words: untuk, untuk apa, apa, dsb
+        cleaned = re.sub(r"^(untuk|apa|untuk apa|apa)\s*", "", cleaned, flags=re.IGNORECASE).strip()
+        # Clean up multiple spaces
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
         
         return seconds, cleaned
     
@@ -174,6 +177,11 @@ def extract_time_from_text(text):
 def parse_add_reminder_natural(text):
     """Parse natural language: 'ingatkan/reminder dalam 5 menit untuk [teks]'
     Return: (duration_seconds, reminder_text) atau (None, None) jika parse gagal
+    
+    Examples:
+    - "ingatkan aku dalam 5 menit untuk belajar"
+    - "reminder dalam 2 jam untuk makan siang"
+    - "ingat dalam 30 detik submit tugas"
     """
     # Cek pattern: ingatkan/reminder + durasi + teks
     if not re.search(r"\b(ingatkan|reminder|remind|ingat|ingetin)\b", text, re.IGNORECASE):
@@ -185,8 +193,9 @@ def parse_add_reminder_natural(text):
     # Extract durasi
     duration_seconds, reminder_text = extract_duration_from_text(text_clean)
     
-    if duration_seconds and reminder_text:
-        return duration_seconds, reminder_text
+    # Jika reminder text kosong atau hanya whitespace, parse gagal
+    if duration_seconds and reminder_text and len(reminder_text.strip()) > 0:
+        return duration_seconds, reminder_text.strip()
     
     return None, None
 
@@ -245,7 +254,7 @@ def parse_delete_schedule_natural(text):
 
 def parse_delete_reminder_natural(text):
     """Parse natural language: 'hapus reminder [teks/terbaru]' atau 'clear reminder', etc
-    Return: reminder_text atau 'latest' atau None jika parse gagal
+    Return: reminder_text atau 'latest' atau 'all' atau None jika parse gagal
     """
     # Cek pattern: hapus reminder, delete reminder, clear reminder
     if not re.search(r"\b(hapus|delete|remove|clear)\b.*\b(reminder|reminders)\b", text, re.IGNORECASE):
@@ -254,8 +263,8 @@ def parse_delete_reminder_natural(text):
     # Remove trigger words
     text_clean = re.sub(r"(hapus|delete|remove|clear)\s+(semua\s+)?(reminder|reminders)\s*", "", text, flags=re.IGNORECASE).strip()
     
-    # Cek untuk "semua" / "all"
-    if re.search(r"\b(semua|all)\b", text_clean, re.IGNORECASE):
+    # Cek untuk "semua" / "all" SEBELUM remove dari text
+    if re.search(r"\b(semua|all)\b", text, re.IGNORECASE):
         return "all"
     
     # Cek untuk "terbaru" / "latest"
