@@ -39,6 +39,7 @@ WIB = timezone(timedelta(hours=7))
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 ALLOWED_SERVERS = [1440333970091802665]
 SCHEDULE_CHANNEL_ID = 1440355268138500107
+LOG_CHANNEL_ID = 1471374778710495355
 ROLE_ID = "1440340102122307665"
 
 # --- KONFIGURASI GROQ AI ---
@@ -306,14 +307,62 @@ def log_command_usage(user_id, command_name):
     except Exception as e:
         print(f"[ANALYTICS ERROR] {e}")
 
+async def log_to_channel(log_type: str, title: str, description: str, details: dict = None):
+    """
+    Send formatted log to Discord channel
+    log_type: 'success', 'error', 'info', 'reminder', 'schedule'
+    """
+    try:
+        channel = bot.get_channel(LOG_CHANNEL_ID)
+        if not channel:
+            channel = await bot.fetch_channel(LOG_CHANNEL_ID)
+        
+        if not channel:
+            print(f"[LOG] Channel {LOG_CHANNEL_ID} tidak ditemukan")
+            return
+        
+        # Tentukan warna dan emoji berdasarkan log_type
+        colors = {
+            'success': discord.Color.green(),
+            'error': discord.Color.red(),
+            'info': discord.Color.blue(),
+            'reminder': discord.Color.yellow(),
+            'schedule': discord.Color.purple(),
+            'warning': discord.Color.orange(),
+        }
+        
+        emojis = {
+            'success': '✅',
+            'error': '❌',
+            'info': 'ℹ️',
+            'reminder': '⏰',
+            'schedule': '📅',
+            'warning': '⚠️',
+        }
+        
+        embed = discord.Embed(
+            title=f"{emojis.get(log_type, '📝')} {title}",
+            description=description,
+            color=colors.get(log_type, discord.Color.greyple()),
+            timestamp=datetime.now(WIB)
+        )
+        
+        # Tambah details sebagai fields
+        if details:
+            for key, value in details.items():
+                embed.add_field(name=key, value=str(value), inline=True)
+        
+        embed.set_footer(text="IS 1 Assistant Bot Logger")
+        await channel.send(embed=embed)
+    except Exception as e:
+        print(f"[LOG ERROR] Failed to send log: {e}")
+
 # --- TASKS ---
 
 @tasks.loop(seconds=15)
 async def check_reminders():
     await bot.wait_until_ready()
     due_reminders = database.get_due_reminders()
-    if due_reminders:
-        print(f"[REMINDER] Found {len(due_reminders)} due reminders")
     for reminder_id, user_id, message in due_reminders:
         try:
             user = bot.get_user(user_id)
@@ -321,16 +370,51 @@ async def check_reminders():
                 user = await bot.fetch_user(user_id)
             if user:
                 await user.send(f"⏰ **Reminder:** {message}")
-                print(f"[REMINDER] Sent to user {user_id}: {message}")
+                await log_to_channel(
+                    'reminder',
+                    'Reminder Terkirim',
+                    f'Reminder berhasil dikirim ke user',
+                    {
+                        'User ID': user_id,
+                        'Username': user.name,
+                        'Pesan': message
+                    }
+                )
             else:
-                print(f"[REMINDER] User {user_id} not found, skipping")
+                await log_to_channel(
+                    'warning',
+                    'User Tidak Ditemukan',
+                    f'Reminder tidak bisa dikirim, user tidak ada di cache',
+                    {
+                        'User ID': user_id,
+                        'Reminder ID': reminder_id,
+                        'Pesan': message
+                    }
+                )
         except discord.Forbidden:
-            print(f"[REMINDER] DM ditutup untuk user {user_id}")
+            await log_to_channel(
+                'error',
+                'DM Tertutup',
+                f'User tidak memungkinkan menerima DM',
+                {
+                    'User ID': user_id,
+                    'Reminder ID': reminder_id,
+                    'Pesan': message
+                }
+            )
         except Exception as e:
-            print(f"[REMINDER ERROR] Failed to send reminder {reminder_id}: {e}")
+            await log_to_channel(
+                'error',
+                'Error Mengirim Reminder',
+                f'Gagal mengirim reminder: {str(e)}',
+                {
+                    'Reminder ID': reminder_id,
+                    'User ID': user_id,
+                    'Error': type(e).__name__
+                }
+            )
         finally:
             database.delete_reminder(reminder_id)
-            print(f"[REMINDER] Deleted reminder {reminder_id} from database")
 
 @tasks.loop(hours=24)
 async def announce_schedule():
